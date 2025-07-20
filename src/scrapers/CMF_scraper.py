@@ -3,8 +3,8 @@ __AUTHOR__ = "Luis Francisco Barra Sandoval"
 __EMAIL__ = "contacto@luisbarra.cl"
 __VERSION__ = "1.0.0"
 
-import re
 from typing import List
+import re
 from playwright.async_api import Page, BrowserContext, TimeoutError
 from src.config.config import NETWORK_IDLE_TIMEOUT
 from src.scrapers.login_scraper import LoginScraper
@@ -17,6 +17,15 @@ from src.utils.exceptions import ScraperDataExtractionError, SelectorNotFoundErr
 LOGIN_URL = 'https://conocetudeuda.cmfchile.cl/mediador/claveunica/'
 
 logger = get_logger(__name__)
+
+# Constants for CMF table headers
+INSTITUTION_HEADER = "Institución financiera"
+CREDIT_TYPE_HEADER = "Tipo de crédito"
+TOTAL_CREDIT_HEADER = "Total del crédito"
+CURRENT_HEADER = "Vigente"
+LATE_30_59_HEADER = "30 a 59 días"
+LATE_60_89_HEADER = "60 a 89 días"
+LATE_90_PLUS_HEADER = "90 o más días"
 
 class CMFScraper:
 
@@ -76,6 +85,42 @@ class CMFScraper:
         try:
             await page.wait_for_selector("#tabla_deuda_directa", timeout=NETWORK_IDLE_TIMEOUT)
 
+            # Extract headers to create a dynamic mapping
+            header_elements = await page.locator("#tabla_deuda_directa thead th").all()
+            headers = []
+            for header_el in header_elements:
+                text = await header_el.inner_text()
+                # Clean up header text (remove newlines, extra spaces, and 'de atraso' from specific columns)
+                cleaned_text = text.replace("\n", " ").strip()
+                if "días de atraso" in cleaned_text:
+                    cleaned_text = cleaned_text.replace("de atraso", "").strip()
+                headers.append(cleaned_text)
+
+            # Create a mapping from cleaned header name to its index
+            header_map = {
+                INSTITUTION_HEADER: "institution",
+                CREDIT_TYPE_HEADER: "credit_type",
+                TOTAL_CREDIT_HEADER: "total_credit",
+                CURRENT_HEADER: "current",
+                LATE_30_59_HEADER: "late_30_59",
+                LATE_60_89_HEADER: "late_60_89",
+                LATE_90_PLUS_HEADER: "late_90_plus",
+            }
+
+            # Build index map based on actual headers
+            index_map = {}
+            for i, header_name in enumerate(headers):
+                if header_name in header_map:
+                    index_map[header_map[header_name]] = i
+
+            # Validate that all expected headers are found
+            expected_keys = set(header_map.values())
+            found_keys = set(index_map.keys())
+            if not expected_keys.issubset(found_keys):
+                missing_keys = expected_keys - found_keys
+                logger.error(f"Missing expected headers in CMF debt table: {missing_keys}")
+                raise ScraperDataExtractionError(f"Missing expected headers in CMF debt table: {missing_keys}")
+
             # Select tbody rows (institution-level data)
             body_rows = page.locator(
                 "#tabla_deuda_directa tbody#tabla_deuda_directa_data tr")
@@ -91,19 +136,20 @@ class CMFScraper:
                 row = body_rows.nth(i)
                 cells = await row.locator("td").all_text_contents()
 
-                if len(cells) < 7:
-                    logger.warning(f"Row {i} has less than 7 cells. Skipping.")
+                # Ensure we have enough cells before trying to access them by index
+                if len(cells) < max(index_map.values()) + 1:
+                    logger.warning(f"Row {i} has fewer cells than expected. Skipping.")
                     continue
 
                 try:
                     results.append(DebtEntry({
-                        "institution": cells[0].strip(),
-                        "credit_type": cells[1].strip(),
-                        "total_credit": parse_money(cells[2]),
-                        "current": parse_money(cells[3]),
-                        "late_30_59": parse_money(cells[4]),
-                        "late_60_89": parse_money(cells[5]),
-                        "late_90_plus": parse_money(cells[6]),
+                        "institution": cells[index_map["institution"]].strip(),
+                        "credit_type": cells[index_map["credit_type"]].strip(),
+                        "total_credit": parse_money(cells[index_map["total_credit"]]),
+                        "current": parse_money(cells[index_map["current"]]),
+                        "late_30_59": parse_money(cells[index_map["late_30_59"]]),
+                        "late_60_89": parse_money(cells[index_map["late_60_89"]]),
+                        "late_90_plus": parse_money(cells[index_map["late_90_plus"]]),
                     }))
                 except ValueError as e:
                     logger.error(f"Error parsing money in row {i}: {e}. Row data: {cells}")
@@ -113,23 +159,23 @@ class CMFScraper:
             total_cells = await footer_row.locator("td").all_text_contents()
 
             # Define a helper to safely get and parse a cell, logging a warning if missing
-            def get_parsed_total(index: int, field_name: str) -> int:
-                if len(total_cells) > index:
-                    try:
-                        return parse_money(total_cells[index])
-                    except ValueError as e:
-                        logger.error(f"Could not parse '{field_name}' from cell at index {index}. Value: '{total_cells[index]}'.")
-                        raise ScraperDataExtractionError(f"Error parsing total for {field_name}") from e
-                else:
-                    logger.error(f"Missing '{field_name}' cell at index {index}.")
-                    raise ScraperDataExtractionError(f"Missing total cell for {field_name}")
+            def get_parsed_total(field_key: str) -> int:
+                index = index_map.get(field_key)
+                if index is None or len(total_cells) <= index:
+                    logger.error(f"Missing total cell for '{field_key}' at expected index {index}.")
+                    raise ScraperDataExtractionError(f"Missing total cell for {field_key}")
+                try:
+                    return parse_money(total_cells[index])
+                except ValueError as e:
+                    logger.error(f"Could not parse '{field_key}' from cell at index {index}. Value: '{total_cells[index]}'.")
+                    raise ScraperDataExtractionError(f"Error parsing total for {field_key}") from e
 
             totals: DebtTotals = {
-                "total_credit": get_parsed_total(2, "total_credit"),
-                "current": get_parsed_total(3, "current"),
-                "late_30_59": get_parsed_total(4, "late_30_59"),
-                "late_60_89": get_parsed_total(5, "late_60_89"),
-                "late_90_plus": get_parsed_total(6, "late_90_plus"),
+                "total_credit": get_parsed_total("total_credit"),
+                "current": get_parsed_total("current"),
+                "late_30_59": get_parsed_total("late_30_59"),
+                "late_60_89": get_parsed_total("late_60_89"),
+                "late_90_plus": get_parsed_total("late_90_plus"),
             }
 
             return CMFScraperResult({
