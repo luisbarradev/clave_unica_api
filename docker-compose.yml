@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 services:
   redis:
     image: redis:7-alpine
@@ -16,8 +16,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDISHOST: redis
+      REDISPORT: 6379
+      REDISPASSWORD: ""
       REDIS_DB: 0
     depends_on:
       - redis
@@ -27,8 +28,9 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDISHOST: redis
+      REDISPORT: 6379
+      REDISPASSWORD: ""
       REDIS_DB: 0
     depends_on:
       - redis

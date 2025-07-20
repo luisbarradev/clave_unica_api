@@ -6,10 +6,11 @@ from src.queue.models import Task
 
 class QueueManager:
     def __init__(self, queue_name='cmf_tasks', dlq_name='cmf_dlq'):
-        host = os.getenv('REDIS_HOST', 'localhost')
-        port = int(os.getenv('REDIS_PORT', 6379))
-        db = int(os.getenv('REDIS_DB', 0))
-        self.redis_client = redis.Redis(host=host, port=port, db=db)
+        host = os.getenv('REDISHOST', 'localhost')
+        port = int(os.getenv('REDISPORT', 6379))
+        password = os.getenv('REDISPASSWORD', None)
+        db = int(os.getenv('REDIS_DB', 0)) # Keeping REDIS_DB as it's a common Redis client parameter
+        self.redis_client = redis.Redis(host=host, port=port, password=password, db=db)
         self.queue_name = queue_name
         self.dlq_name = dlq_name
 
