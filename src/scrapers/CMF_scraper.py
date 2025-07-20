@@ -29,7 +29,9 @@ LATE_60_89_HEADER = "60 a 89 días"
 LATE_90_PLUS_HEADER = "90 o más días"
 
 
-class CMFScraper:
+from src.scrapers.base_scraper import BaseScraper
+
+class CMFScraper(BaseScraper):
 
     from src.models.clave_unica import ClaveUnica
 

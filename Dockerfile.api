@@ -5,7 +5,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./ 
 
 RUN pip install uv && uv sync && pip install -e .
-
+RUN apt-get update && apt-get install -y ffmpeg --no-install-recommends && rm -rf /var/lib/apt/lists/*
 COPY . .
 
 EXPOSE 8000
