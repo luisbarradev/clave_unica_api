@@ -3,6 +3,9 @@ import requests
 import logging
 from playwright.async_api import async_playwright
 from src.scrapers.CMF_scraper import CMFScraper
+from src.scrapers.AFC_scraper import AFCScraper
+from src.scrapers.captcha_solver import RecaptchaSolver
+from src.scrapers.base_scraper import BaseScraper
 from src.scrapers.login_scraper import LoginScraper
 from src.models.clave_unica import ClaveUnica
 from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
@@ -22,11 +25,18 @@ async def process_task(task, queue_manager: QueueManager):
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
-            
             login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
-            cmf_scraper = CMFScraper(context=context, login_scraper=login_scraper, clave_unica=clave_unica)
-            
-            data = await cmf_scraper.run()
+            scraper: BaseScraper
+            data = None
+            if task.scraper_type == 'cmf':
+                scraper = CMFScraper(context=context, login_scraper=login_scraper, clave_unica=clave_unica)
+                data = await scraper.run()
+            elif task.scraper_type == 'afc':
+                scraper = AFCScraper(context=context, login_scraper=login_scraper, clave_unica=clave_unica, captcha_solver=RecaptchaSolver())
+                data = await scraper.run()
+            else:
+                raise ValueError(f"Unknown scraper type: {task.scraper_type}")
+
             await browser.close()
             
             result = {"status": "success", "task_id": task.task_id, "data": data}
