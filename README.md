@@ -7,6 +7,9 @@ This project aims to provide an API for various services related to "Clave Unica
 - **CMF Scraper**: Currently implemented, this service allows fetching data from the CMF using a user's RUT (Chilean national identification number) and password.
 - **Clave Unica Integration**: Designed to integrate with Chile's "Clave Unica" system for secure authentication.
 - **Extensible Login System**: Utilizes the Strategy pattern for flexible and extensible login mechanisms, allowing easy addition of new login providers.
+- **Asynchronous Task Processing**: Implements a robust asynchronous system for scraping tasks, offloading heavy operations to background workers.
+- **Redis-backed Queue & Deduplication**: Uses Redis for persistent task queuing and to prevent processing of duplicate requests within a defined timeframe.
+- **Decoupled Workers**: Scraping tasks are processed by independent worker processes, enhancing scalability and fault tolerance.
 
 ### Login Strategy Pattern
 
@@ -40,12 +43,61 @@ classDiagram
     LoginStrategy <|-- ClaveUnicaLoginStrategy : implements
 ```
 
+### Asynchronous Task Processing Architecture
+
+To handle scraping tasks asynchronously and ensure scalability and fault tolerance, the system employs a message queue pattern with Redis. This decouples the API request from the actual scraping process.
+
+**How it works:**
+
+1.  **API (Producer)**: Receives asynchronous scraping requests, performs basic validation and deduplication, and then enqueues the task into Redis.
+2.  **Redis Queue**: Acts as a reliable message broker, storing tasks until a worker is available. It also manages a Dead Letter Queue (DLQ) for tasks that fail after multiple retries.
+3.  **Worker(s) (Consumer)**: Independent processes that continuously poll the Redis queue for new tasks. Upon receiving a task, a worker executes the scraping logic using Playwright.
+4.  **Webhook Notification**: Once a task is completed (successfully or with final failure), the worker sends the results or error details to the `webhook_url` provided in the original request.
+
+This architecture allows for horizontal scaling of workers, robust error handling with retries, and ensures that API responses are fast, as the heavy scraping operations are offloaded.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API
+    participant RedisQueue
+    participant Worker
+    participant ExternalWebhook
+
+    Client->>API: POST /async/scrape/cmf (username, password, webhook_url)
+    API->>API: Validate & Deduplicate Request
+    API->>RedisQueue: Enqueue Task (task_id, username, password, webhook_url)
+    API-->>Client: Task Accepted (status, task_id)
+
+    loop Worker Processing
+        Worker->>RedisQueue: Dequeue Task
+        alt Task Available
+            Worker->>Worker: Execute Scraping Logic (Playwright)
+            alt Scraping Success
+                Worker->>ExternalWebhook: POST Results (task_id, data)
+            else Scraping Failure
+                Worker->>Worker: Increment Retries
+                alt Max Retries Not Reached
+                    Worker->>RedisQueue: Re-enqueue Task (with updated retries)
+                else Max Retries Reached
+                    Worker->>ExternalWebhook: POST Error (task_id, error_details)
+                    Worker->>RedisQueue: Enqueue to DLQ
+                end
+            end
+        else No Task
+            Worker->>Worker: Wait (e.g., 1 second)
+        end
+    end
+```
+
 ## Technologies Used
 
 - **Python**: The core language for the project.
 - **FastAPI**: For building the web API.
 - **Uvicorn**: ASGI server for running the FastAPI application.
 - **Playwright**: For headless browser automation and web scraping.
+- **Redis**: Used for task queuing and deduplication.
+- **Docker & Docker Compose**: For containerization and orchestration of services.
 - **BeautifulSoup4**: For parsing HTML content.
 - **python-dotenv**: For managing environment variables.
 - **boto3**: AWS SDK for Python (suggests potential AWS integration).
@@ -60,11 +112,20 @@ clave_unica_api/
 ├── cli.py                  # Command-line interface for running scrapers
 ├── pyproject.toml          # Project metadata and dependencies
 ├── README.md               # This file
+├── Dockerfile.api          # Dockerfile for the FastAPI application
+├── Dockerfile.worker       # Dockerfile for the background worker
+├── docker-compose.yml      # Docker Compose configuration for services
+├── .env.example            # Example environment variables file
 └── src/
     ├── __init__.py
     ├── config/             # Configuration files
     ├── dto/                # Data Transfer Objects
-    ├── models/             # Data models (e.g., ClaveUnica)
+    ├── models/             # Data models (e.g., ClaveUnica, Task)
+    ├── queue/              # Queue management (Redis, Deduplication)
+    │   ├── __init__.py
+    │   ├── models.py       # Task data model
+    │   ├── queue_manager.py # Redis queue implementation
+    │   └── deduplicator.py # Redis-based deduplication logic
     ├── scrapers/           # Web scraping modules
     │   ├── CMF_scraper.py  # CMF scraping logic
     │   ├── login_scraper.py # Login context for various services
@@ -72,14 +133,18 @@ clave_unica_api/
     │       ├── __init__.py
     │       ├── base_strategy.py # Abstract base class for login strategies
     │       └── clave_unica_strategy.py # Clave Unica specific login strategy
-    └── utils/              # Utility functions
+    ├── utils/              # Utility functions (e.g., RUT validator)
+    └── worker.py           # Background worker for processing tasks
 ```
 
 ## Installation
 
 1.  **Clone the repository:**
 
-
+    ```bash
+    git clone https://github.com/luisbarradev/clave_unica_api.git
+    cd clave_unica_api
+    ```
 
 2.  **Create a virtual environment (recommended):**
 
@@ -88,15 +153,42 @@ clave_unica_api/
     source .venv/activate
     ```
 
-3.  **Install dependencies:**
+3.  **Install dependencies using `uv`:**
 
     ```bash
-    pip install -e .
+    pip install uv # Install uv if you don't have it
+    uv sync
+    pip install -e . # Install project in editable mode
     ```
 
 ## Usage
 
-### Running the CMF Scraper via CLI
+### Running with Docker Compose (Recommended for Development & Production)
+
+This project is designed to run using Docker Compose, which will set up Redis, the FastAPI API, and the background worker(s).
+
+1.  **Ensure Docker is running** on your system.
+2.  **Create a `.env` file** in the root of your project based on `.env.example` and configure your Redis connection details if not using the default local setup.
+
+    ```bash
+    cp .env.example .env
+    # Edit .env if needed
+    ```
+
+3.  **Start the services:**
+
+    ```bash
+    docker-compose up --build
+    ```
+
+    This command will:
+
+    - Build the Docker images for the API and worker.
+    - Start a Redis container.
+    - Start the FastAPI API service (accessible at `http://localhost:8000`).
+    - Start one instance of the background worker (you can scale workers by uncommenting `replicas` in `docker-compose.yml`).
+
+### Running the CMF Scraper via CLI (Local Development)
 
 To run the CMF scraper from the command line, use the `cli.py` script:
 
@@ -104,41 +196,52 @@ To run the CMF scraper from the command line, use the `cli.py` script:
 python cli.py cmf --username <YOUR_RUT> --password <YOUR_PASSWORD> [--headless]
 ```
 
--   Replace `<YOUR_RUT>` with your Chilean RUT (without dots or hyphens).
--   Replace `<YOUR_PASSWORD>` with your password.
--   Use `--headless` to run the browser in headless mode (without a visible UI).
+- Replace `<YOUR_RUT>` with your Chilean RUT (without dots or hyphens).
+- Replace `<YOUR_PASSWORD>` with your password.
+- Use `--headless` to run the browser in headless mode (without a visible UI).
 
-### Running the API
+### API Endpoints
 
-To run the FastAPI application, use Uvicorn:
+The API will be available at `http://localhost:8000` (or the host configured in Docker Compose). You can access the interactive API documentation (Swagger UI) at `http://localhost:8000/docs` and the alternative ReDoc documentation at `http://localhost:8000/redoc`.
 
-```bash
-uvicorn api:app --host 0.0.0.0 --port 8000
-```
+- **POST `/scrape/cmf`**: Scrapes CMF data synchronously using provided credentials.
 
-The API will be available at `http://0.0.0.0:8000`. You can access the interactive API documentation (Swagger UI) at `http://0.0.0.0:8000/docs` and the alternative ReDoc documentation at `http://0.0.0.0:8000/redoc`.
+  - **Request Body**:
+    ```json
+    {
+      "username": "YOUR_RUT",
+      "password": "YOUR_PASSWORD"
+    }
+    ```
+  - **Example using `curl`**:
+    ```bash
+    curl -X POST "http://localhost:8000/scrape/cmf" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "username": "12345678-9",
+               "password": "your_password"
+             }'
+    ```
 
-**Endpoint:**
-
--   **POST `/scrape/cmf`**: Scrapes CMF data using provided credentials.
-    -   **Request Body**:
-        ```json
-        {
-            "username": "YOUR_RUT",
-            "password": "YOUR_PASSWORD"
-        }
-        ```
-    -   **Example using `curl`**:
-        ```bash
-        curl -X POST "http://0.0.0.0:8000/scrape/cmf" \
-             -H "Content-Type: application/json" \
-             -d '{
-                   "username": "12345678-9",
-                   "password": "your_password"
-                 }'
-        ```
-
-
+- **POST `/async/scrape/cmf`**: Enqueues a CMF scraping task for asynchronous processing. Results will be sent to the provided `webhook_url`.
+  - **Request Body**:
+    ```json
+    {
+      "username": "YOUR_RUT",
+      "password": "YOUR_PASSWORD",
+      "webhook_url": "YOUR_WEBHOOK_URL"
+    }
+    ```
+  - **Example using `curl`**:
+    ```bash
+    curl -X POST "http://localhost:8000/async/scrape/cmf" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "username": "12345678-9",
+               "password": "your_password",
+               "webhook_url": "https://your-callback-url.com/results"
+             }'
+    ```
 
 ## Development
 
