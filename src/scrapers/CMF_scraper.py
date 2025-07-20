@@ -31,15 +31,18 @@ LATE_90_PLUS_HEADER = "90 o más días"
 
 class CMFScraper:
 
-    def __init__(self, context: BrowserContext, login_scraper: LoginScraper):
+    from src.models.clave_unica import ClaveUnica
+
+    def __init__(self, context: BrowserContext, login_scraper: LoginScraper, clave_unica: ClaveUnica):
         self.login_scraper = login_scraper
         self.context = context
+        self.clave_unica = clave_unica
 
     @log_execution_func
     async def __login(self, page: Page):
         await page.goto(LOGIN_URL)
         await page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
-        await self.login_scraper.do_login(page)
+        await self.login_scraper.do_login(page, self.clave_unica)
         await page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
 
     @log_execution_func
