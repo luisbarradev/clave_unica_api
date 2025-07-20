@@ -108,9 +108,37 @@ python cli.py cmf --username <YOUR_RUT> --password <YOUR_PASSWORD> [--headless]
 -   Replace `<YOUR_PASSWORD>` with your password.
 -   Use `--headless` to run the browser in headless mode (without a visible UI).
 
-### Running the API (Future Implementation)
+### Running the API
 
-*(Details for running the FastAPI application will be added here once the API endpoints are implemented.)*
+To run the FastAPI application, use Uvicorn:
+
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+The API will be available at `http://0.0.0.0:8000`. You can access the interactive API documentation (Swagger UI) at `http://0.0.0.0:8000/docs` and the alternative ReDoc documentation at `http://0.0.0.0:8000/redoc`.
+
+**Endpoint:**
+
+-   **POST `/scrape/cmf`**: Scrapes CMF data using provided credentials.
+    -   **Request Body**:
+        ```json
+        {
+            "username": "YOUR_RUT",
+            "password": "YOUR_PASSWORD"
+        }
+        ```
+    -   **Example using `curl`**:
+        ```bash
+        curl -X POST "http://0.0.0.0:8000/scrape/cmf" \
+             -H "Content-Type: application/json" \
+             -d '{
+                   "username": "12345678-9",
+                   "password": "your_password"
+                 }'
+        ```
+
+
 
 ## Development
 

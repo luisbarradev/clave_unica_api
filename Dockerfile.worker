@@ -1,0 +1,11 @@
+FROM mcr.microsoft.com/playwright/python:v1.53.0-noble
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./ 
+
+RUN pip install uv && uv sync && pip install -e .
+
+COPY . .
+
+CMD ["python", "-m", "src.worker"]
