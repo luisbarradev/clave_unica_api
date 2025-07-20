@@ -5,19 +5,37 @@ __VERSION__ = "1.0.0"
 
 import logging
 import uuid
+from functools import wraps
 
 EXECUTION_ID = uuid.uuid4()
+_logger_initialized = False
 
-logging.basicConfig(
-    level=logging.INFO,
-    format=f'%(asctime)s - %(levelname)s - [{EXECUTION_ID}] - %(message)s'
-)
+def get_logger(name: str = __name__) -> logging.Logger:
+    """
+    Returns a logger instance with a standardized format.
+    Initializes basic logging configuration if not already done.
+    """
+    global _logger_initialized
+    if not _logger_initialized:
+        logging.basicConfig(
+            level=logging.INFO,
+            format=f'%(asctime)s - %(name)s - %(levelname)s - [{EXECUTION_ID}] - %(message)s'
+        )
+        _logger_initialized = True
+    return logging.getLogger(name)
 
+# Get a default logger for this module
+logger = get_logger(__name__)
 
 def log_execution_func(func):
+    @wraps(func)
     async def wrapper(*args, **kwargs):
-        logging.info(f"Executing {func.__name__} with args: {args} and kwargs: {kwargs}")
-        result = await func(*args, **kwargs)
-        logging.info(f"Finished {func.__name__} with result: {result}")
-        return result
+        logger.info(f"Executing {func.__name__}")
+        try:
+            result = await func(*args, **kwargs)
+            logger.info(f"Finished {func.__name__}")
+            return result
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {e}", exc_info=True)
+            raise
     return wrapper
