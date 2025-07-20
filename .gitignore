@@ -10,5 +10,6 @@ wheels/
 .venv
 tests
 snapshots
-main.py
+demo.py
 .env
+.coverage
