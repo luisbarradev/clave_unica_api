@@ -1,20 +1,22 @@
 import asyncio
-import requests
 import logging
-from playwright.async_api import async_playwright
-from src.scrapers.CMF_scraper import CMFScraper
-from src.scrapers.AFC_scraper import AFCScraper
-from src.scrapers.captcha_solver import RecaptchaSolver
-from src.scrapers.base_scraper import BaseScraper
-from src.scrapers.login_scraper import LoginScraper
-from src.models.clave_unica import ClaveUnica
-from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
-from src.queue.queue_manager import QueueManager
 
+import requests
+from playwright.async_api import async_playwright
+
+from src.models.clave_unica import ClaveUnica
+from src.queue.queue_manager import QueueManager
+from src.scrapers.AFC_scraper import AFCScraper
+from src.scrapers.base_scraper import BaseScraper
+from src.scrapers.captcha_solver import RecaptchaSolver
+from src.scrapers.CMF_scraper import CMFScraper
+from src.scrapers.login_scraper import LoginScraper
+from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 async def process_task(task, queue_manager: QueueManager):
+    """Processes a single task from the queue."""
     logging.info(f"Processing task: {task.task_id} (Attempt: {task.retries + 1}/{task.max_retries})")
     try:
         clave_unica = ClaveUnica(
@@ -32,13 +34,16 @@ async def process_task(task, queue_manager: QueueManager):
                 scraper = CMFScraper(context=context, login_scraper=login_scraper, clave_unica=clave_unica)
                 data = await scraper.run()
             elif task.scraper_type == 'afc':
-                scraper = AFCScraper(context=context, login_scraper=login_scraper, clave_unica=clave_unica, captcha_solver=RecaptchaSolver())
+                scraper = AFCScraper(
+                    context=context, login_scraper=login_scraper,
+                    clave_unica=clave_unica, captcha_solver=RecaptchaSolver()
+                )
                 data = await scraper.run()
             else:
                 raise ValueError(f"Unknown scraper type: {task.scraper_type}")
 
             await browser.close()
-            
+
             result = {"status": "success", "task_id": task.task_id, "data": data}
             logging.info(f"Task {task.task_id} completed. Sending to webhook: {task.webhook_url}")
             requests.post(task.webhook_url, json=result)
@@ -53,11 +58,13 @@ async def process_task(task, queue_manager: QueueManager):
             queue_manager.enqueue(task) # Re-enqueue for retry
         else:
             logging.error(f"Task {task.task_id} failed after {task.max_retries} retries. Moving to DLQ.")
-            error_result = {"status": "failed", "task_id": task.task_id, "detail": str(e), "retries_attempted": task.retries}
+            error_result = {"status": "failed", "task_id": task.task_id, "detail": str(e),
+                            "retries_attempted": task.retries}
             requests.post(task.webhook_url, json=error_result) # Notify webhook of final failure
             queue_manager.enqueue_dlq(task) # Move to Dead Letter Queue
 
 async def main():
+    """Main function for the worker that continuously processes tasks from the queue."""
     queue_manager = QueueManager()
     logging.info("Worker started. Listening for tasks...")
     while True:

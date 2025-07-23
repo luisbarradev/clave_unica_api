@@ -1,12 +1,13 @@
 # Clave Unica API
 
-This project aims to provide an API for various services related to "Clave Unica" (Unique Key) in Chile, starting with the CMF (Comisión para el Mercado Financiero) service. It leverages web scraping techniques to gather information from official sources.
+This project aims to provide an API for various services related to "Clave Unica" (Unique Key) in Chile, leveraging web scraping techniques to gather information from official sources. It features a modular and extensible architecture to support various data sources.
 
 ## Features
 
-- **CMF Scraper**: Currently implemented, this service allows fetching data from the CMF using a user's RUT (Chilean national identification number) and password.
-- **Clave Unica Integration**: Designed to integrate with Chile's "Clave Unica" system for secure authentication.
-- **Extensible Login System**: Utilizes the Strategy pattern for flexible and extensible login mechanisms, allowing easy addition of new login providers.
+- **Common Scraper Interface**: Introduces a `BaseScraper` abstract class, ensuring a consistent interface (`run()` method) for all scrapers. This promotes modularity and simplifies integration.
+- **CMF Scraper**: Fetches data from the CMF (Comisión para el Mercado Financiero) using a user's RUT (Chilean national identification number) and password. Now inherits from `BaseScraper`.
+- **AFC Scraper**: Extracts "empresas" (companies) and "cotizaciones" (contributions) data from the AFC website. It handles reCAPTCHA solving and automatically scrapes data for the current year and the two previous years. Also inherits from `BaseScraper`.
+- **Separation of Captcha Logic**: reCAPTCHA solving logic is extracted into a dedicated `RecaptchaSolver` class, improving modularity and testability.
 - **Asynchronous Task Processing**: Implements a robust asynchronous system for scraping tasks, offloading heavy operations to background workers.
 - **Redis-backed Queue & Deduplication**: Uses Redis for persistent task queuing and to prevent processing of duplicate requests within a defined timeframe.
 - **Decoupled Workers**: Scraping tasks are processed by independent worker processes, enhancing scalability and fault tolerance.
@@ -120,6 +121,8 @@ clave_unica_api/
     ├── __init__.py
     ├── config/             # Configuration files
     ├── dto/                # Data Transfer Objects
+    │   ├── afc_data.py     # Data Transfer Objects for AFC Scraper
+    │   └── cmf_data.py     # Data Transfer Objects for CMF Scraper
     ├── models/             # Data models (e.g., ClaveUnica, Task)
     ├── queue/              # Queue management (Redis, Deduplication)
     │   ├── __init__.py
@@ -127,6 +130,9 @@ clave_unica_api/
     │   ├── queue_manager.py # Redis queue implementation
     │   └── deduplicator.py # Redis-based deduplication logic
     ├── scrapers/           # Web scraping modules
+    │   ├── AFC_scraper.py  # AFC scraping logic
+    │   ├── base_scraper.py # Abstract base class for all scrapers
+    │   ├── captcha_solver.py # reCAPTCHA solving logic
     │   ├── CMF_scraper.py  # CMF scraping logic
     │   ├── login_scraper.py # Login context for various services
     │   └── login_strategies/ # Concrete login strategy implementations
@@ -188,12 +194,24 @@ This project is designed to run using Docker Compose, which will set up Redis, t
     - Start the FastAPI API service (accessible at `http://localhost:8000`).
     - Start one instance of the background worker (you can scale workers by uncommenting `replicas` in `docker-compose.yml`).
 
-### Running the CMF Scraper via CLI (Local Development)
+### Running Scrapers via CLI (Local Development)
 
-To run the CMF scraper from the command line, use the `cli.py` script:
+To run the scrapers from the command line, use the `cli.py` script:
+
+#### CMF Scraper
 
 ```bash
 python cli.py cmf --username <YOUR_RUT> --password <YOUR_PASSWORD> [--headless]
+```
+
+- Replace `<YOUR_RUT>` with your Chilean RUT (without dots or hyphens).
+- Replace `<YOUR_PASSWORD>` with your password.
+- Use `--headless` to run the browser in headless mode (without a visible UI).
+
+#### AFC Scraper
+
+```bash
+python cli.py afc --username <YOUR_RUT> --password <YOUR_PASSWORD> [--headless]
 ```
 
 - Replace `<YOUR_RUT>` with your Chilean RUT (without dots or hyphens).
@@ -235,6 +253,45 @@ The API will be available at `http://localhost:8000` (or the host configured in 
   - **Example using `curl`**:
     ```bash
     curl -X POST "http://localhost:8000/async/scrape/cmf" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "username": "12345678-9",
+               "password": "your_password",
+               "webhook_url": "https://your-callback-url.com/results"
+             }'
+    ```
+
+- **POST `/scrape/afc`**: Scrapes AFC data synchronously using provided credentials.
+
+  - **Request Body**:
+    ```json
+    {
+      "username": "YOUR_RUT",
+      "password": "YOUR_PASSWORD"
+    }
+    ```
+  - **Example using `curl`**:
+    ```bash
+    curl -X POST "http://localhost:8000/scrape/afc" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "username": "12345678-9",
+               "password": "your_password"
+             }'
+    ```
+
+- **POST `/async/scrape/afc`**: Enqueues an AFC scraping task for asynchronous processing. Results will be sent to the provided `webhook_url`.
+  - **Request Body**:
+    ```json
+    {
+      "username": "YOUR_RUT",
+      "password": "YOUR_PASSWORD",
+      "webhook_url": "YOUR_WEBHOOK_URL"
+    }
+    ```
+  - **Example using `curl`**:
+    ```bash
+    curl -X POST "http://localhost:8000/async/scrape/afc" \
          -H "Content-Type: application/json" \
          -d '{
                "username": "12345678-9",

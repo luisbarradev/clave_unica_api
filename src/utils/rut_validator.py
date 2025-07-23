@@ -1,6 +1,8 @@
 import re
 
+
 def validate_rut(rut: str) -> bool:
+    """Validates a Chilean RUT (Rol Único Tributario)."""
     rut = rut.upper()
     rut = re.sub(r'[^0-9Kk]+', '', rut)
 
@@ -24,10 +26,10 @@ def validate_rut(rut: str) -> bool:
 
     calculated_dv = 11 - (sum_ % 11)
     if calculated_dv == 11:
-        calculated_dv = '0'
+        calculated_dv_str = '0'
     elif calculated_dv == 10:
-        calculated_dv = 'K'
+        calculated_dv_str = 'K'
     else:
-        calculated_dv = str(calculated_dv)
+        calculated_dv_str = str(calculated_dv)
 
-    return calculated_dv == dv
+    return calculated_dv_str == dv

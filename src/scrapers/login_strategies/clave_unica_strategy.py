@@ -3,19 +3,23 @@ __AUTHOR__ = "Luis Francisco Barra Sandoval"
 __EMAIL__ = "contacto@luisbarra.cl"
 __VERSION__ = "1.0.0"
 
-from src.scrapers.login_strategies.base_strategy import LoginStrategy
-from src.models.clave_unica import ClaveUnica
 from playwright.async_api import Page
-from src.config.logger import get_logger, log_execution_func
+
 from src.config.config import NETWORK_IDLE_TIMEOUT
-from src.utils.exceptions import InvalidCredentialsError, UserBlockedError, UserNotFoundError, UserAlreadyBlockedError
+from src.config.logger import get_logger, log_execution_func
+from src.models.clave_unica import ClaveUnica
+from src.scrapers.login_strategies.base_strategy import LoginStrategy
+from src.utils.exceptions import InvalidCredentialsError, UserAlreadyBlockedError, UserBlockedError, UserNotFoundError
 
 logger = get_logger(__name__)
 
 
 class ClaveUnicaLoginStrategy(LoginStrategy):
+    """Login strategy for Clave Unica authentication."""
+
     @log_execution_func
     async def do_login(self, page: Page, credentials: ClaveUnica) -> bool:
+        """Performs the login operation using Clave Unica credentials."""
         try:
             await page.get_by_role("textbox", name="Ingresa tu RUN").click()
             await page.get_by_role("textbox", name="Ingresa tu RUN").fill(credentials.rut)

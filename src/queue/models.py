@@ -1,7 +1,11 @@
-from pydantic import BaseModel, Field
 from typing import Any
 
+from pydantic import BaseModel, Field
+
+
 class Task(BaseModel):
+    """Represents a task to be processed by the worker."""
+
     task_id: str
     username: str
     password: str

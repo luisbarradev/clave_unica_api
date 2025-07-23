@@ -1,8 +1,9 @@
 from typing import List, TypedDict
-from datetime import datetime
 
 
 class DebtEntry(TypedDict):
+    """Represents a single debt entry from the CMF scraper."""
+
     institution: str
     credit_type: str
     total_credit: int
@@ -13,6 +14,8 @@ class DebtEntry(TypedDict):
 
 
 class DebtTotals(TypedDict):
+    """Represents the total debt amounts from the CMF scraper."""
+
     total_credit: int
     current: int
     late_30_59: int
@@ -21,6 +24,8 @@ class DebtTotals(TypedDict):
 
 
 class CMFScraperResult(TypedDict):
+    """Represents the complete debt data result from the CMF scraper."""
+
     data: List[DebtEntry]
     totals: DebtTotals
     timestamp: str
@@ -28,17 +33,23 @@ class CMFScraperResult(TypedDict):
 
 
 class LineOfCreditEntry(TypedDict):
+    """Represents a single line of credit entry from the CMF scraper."""
+
     institution: str
     direct: int
     indirect: int
 
 
 class LineOfCreditTotals(TypedDict):
+    """Represents the total line of credit amounts from the CMF scraper."""
+
     direct: int
     indirect: int
 
 
 class CMFLineOfCreditResult(TypedDict):
+    """Represents the complete line of credit data result from the CMF scraper."""
+
     data: List[LineOfCreditEntry]
     totals: LineOfCreditTotals
     timestamp: str
@@ -46,5 +57,7 @@ class CMFLineOfCreditResult(TypedDict):
 
 
 class HasCreditLinesResult(TypedDict):
+    """Represents the result of checking for available credit lines."""
+
     direct: bool
     indirect: bool
