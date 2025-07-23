@@ -4,30 +4,39 @@ __EMAIL__ = "contacto@luisbarra.cl"
 __VERSION__ = "1.0.0"
 
 import logging
+import os
 import uuid
 from functools import wraps
 
 EXECUTION_ID = uuid.uuid4()
 _logger_initialized = False
 
+
 def get_logger(name: str = __name__) -> logging.Logger:
-    """
-    Returns a logger instance with a standardized format.
+    """Get a logger instance with a standardized format.
+
     Initializes basic logging configuration if not already done.
     """
     global _logger_initialized
     if not _logger_initialized:
+        log_format = f'[%(levelname)s] [%(name)s] {EXECUTION_ID} - %(message)s'
+        if os.getenv('LOG_WITH_TIMESTAMP', 'true').lower() == 'true':
+            log_format = f'%(asctime)s {log_format}'
+
         logging.basicConfig(
             level=logging.INFO,
-            format=f'%(asctime)s - %(name)s - %(levelname)s - [{EXECUTION_ID}] - %(message)s'
+            format=log_format
         )
         _logger_initialized = True
     return logging.getLogger(name)
 
+
 # Get a default logger for this module
 logger = get_logger(__name__)
 
+
 def log_execution_func(func):
+    """Decorate a function to log its execution and handle exceptions."""
     @wraps(func)
     async def wrapper(*args, **kwargs):
         logger.info(f"Executing {func.__name__}")

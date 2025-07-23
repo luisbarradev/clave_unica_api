@@ -1,7 +1,12 @@
+import os
 
-__AUTHOR__ = "Luis Francisco Barra Sandoval"
-__EMAIL__ = "contacto@luisbarra.cl"
-__VERSION__ = "1.0.0"
+from dotenv import load_dotenv
 
+load_dotenv()
 HEADLESS = False
 NETWORK_IDLE_TIMEOUT = 30000
+
+RATE_LIMIT_TIMES_SCRAPE = int(os.getenv("RATE_LIMIT_TIMES_SCRAPE", "1"))
+RATE_LIMIT_SECONDS_SCRAPE = int(os.getenv("RATE_LIMIT_SECONDS_SCRAPE", "60"))
+RATE_LIMIT_TIMES_HEALTH = int(os.getenv("RATE_LIMIT_TIMES_HEALTH", "6"))
+RATE_LIMIT_SECONDS_HEALTH = int(os.getenv("RATE_LIMIT_SECONDS_HEALTH", "60"))

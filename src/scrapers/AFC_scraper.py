@@ -1,24 +1,20 @@
-from src.scrapers.captcha_solver import RecaptchaSolver
 from src.scrapers.base_scraper import BaseScraper
+from src.scrapers.captcha_solver import RecaptchaSolver
+
 __AUTHOR__ = "Luis Francisco Barra Sandoval"
 __EMAIL__ = "contacto@luisbarra.cl"
 __VERSION__ = "1.0.0"
 
-import logging
-import os
+import datetime
 from typing import Dict, List
 
-import datetime
-
 from bs4 import BeautifulSoup, Tag
-from playwright.async_api import Page, BrowserContext
-from playwright_recaptcha import recaptchav2
+from playwright.async_api import BrowserContext, Page
 
 from src.config.logger import get_logger, log_execution_func
+from src.dto.afc_data import AFCCotizacionEntry, AFCEmpresaEntry, AFCScraperResult
 from src.models.clave_unica import ClaveUnica
 from src.scrapers.login_scraper import LoginScraper
-from src.utils.exceptions import ScraperDataExtractionError
-from src.dto.afc_data import AFCScraperResult, AFCEmpresaEntry, AFCCotizacionEntry
 from src.utils.utils import parse_money
 
 logger = get_logger(__name__)
@@ -27,7 +23,8 @@ logger = get_logger(__name__)
 class AFCScraper(BaseScraper):
     """Scraper for AFC financial data."""
 
-    def __init__(self, context: BrowserContext, login_scraper: LoginScraper, clave_unica: ClaveUnica, captcha_solver: RecaptchaSolver):
+    def __init__(self, context: BrowserContext, login_scraper: LoginScraper, clave_unica: ClaveUnica,
+                 captcha_solver: RecaptchaSolver):
         self.context = context
         self.login_scraper = login_scraper
         self.clave_unica = clave_unica
@@ -127,7 +124,6 @@ class AFCScraper(BaseScraper):
                 "Table element not found by Playwright."
             )
 
-        title = await page.title()
         return companies_data
 
     @log_execution_func
@@ -174,13 +170,11 @@ class AFCScraper(BaseScraper):
             cotizaciones_data_for_year = await self._extract_cotizaciones_table(page, year_to_scrape)
             all_cotizaciones_data[year_to_scrape] = cotizaciones_data_for_year
 
-        title = await page.title()
-        current_url = page.url
         return all_cotizaciones_data
 
     @log_execution_func
     async def _extract_cotizaciones_table(self, page: Page, year: str) -> List[AFCCotizacionEntry]:
-        """Helper method to extract data from the cotizaciones table."""
+        """Extract data from the cotizaciones table."""
         await page.wait_for_selector(
             "table#contentPlaceHolder_dgBusqueda", timeout=30000
         )

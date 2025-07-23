@@ -5,15 +5,18 @@ __VERSION__ = "1.0.0"
 
 import argparse
 import asyncio
+
 from playwright.async_api import async_playwright
-from src.scrapers.CMF_scraper import CMFScraper
+
+from src.models.clave_unica import ClaveUnica
 from src.scrapers.AFC_scraper import AFCScraper
 from src.scrapers.captcha_solver import RecaptchaSolver
+from src.scrapers.CMF_scraper import CMFScraper
 from src.scrapers.login_scraper import LoginScraper
-from src.models.clave_unica import ClaveUnica
 
 
 async def main():
+    """Run the CLI application."""
     parser = argparse.ArgumentParser(description="CLI para ejecutar scrapers.")
     subparsers = parser.add_subparsers(
         dest="command", help="Comandos disponibles")
@@ -41,7 +44,7 @@ async def main():
                             help="Usuario (RUT) para iniciar sesión")
     afc_parser.add_argument("--password", required=True,
                             help="Contraseña para iniciar sesión")
-    
+
 
     args = parser.parse_args()
 

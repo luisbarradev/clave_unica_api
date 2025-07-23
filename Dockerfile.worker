@@ -1,11 +1,13 @@
-FROM mcr.microsoft.com/playwright/python:v1.53.0-noble
+FROM mcr.microsoft.com/playwright/python:v1.54.0-noble
 
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./ 
 
 RUN pip install uv && uv sync && pip install -e .
-RUN apt-get update && apt-get install -y ffmpeg --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
+# Install ffmpeg for pydub
+RUN apt-get update && apt-get install -y ffmpeg
 
 COPY . .
 

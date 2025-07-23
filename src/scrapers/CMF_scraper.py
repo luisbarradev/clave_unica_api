@@ -1,19 +1,29 @@
 
+from src.scrapers.base_scraper import BaseScraper
+
 __AUTHOR__ = "Luis Francisco Barra Sandoval"
 __EMAIL__ = "contacto@luisbarra.cl"
 __VERSION__ = "1.0.0"
 
-from typing import List
-import re
 from datetime import datetime
-from playwright.async_api import Page, BrowserContext, TimeoutError
-from src.config.config import NETWORK_IDLE_TIMEOUT
-from src.scrapers.login_scraper import LoginScraper
-from src.utils.utils import parse_money
-from src.config.logger import get_logger, log_execution_func
-from src.dto.cmf_data import CMFLineOfCreditResult, CMFScraperResult, DebtEntry, DebtTotals, HasCreditLinesResult, LineOfCreditEntry, LineOfCreditTotals
-from src.utils.exceptions import ScraperDataExtractionError, SelectorNotFoundError
+from typing import List
 
+from playwright.async_api import BrowserContext, Page, TimeoutError
+
+from src.config.config import NETWORK_IDLE_TIMEOUT
+from src.config.logger import get_logger, log_execution_func
+from src.dto.cmf_data import (
+    CMFLineOfCreditResult,
+    CMFScraperResult,
+    DebtEntry,
+    DebtTotals,
+    HasCreditLinesResult,
+    LineOfCreditEntry,
+    LineOfCreditTotals,
+)
+from src.scrapers.login_scraper import LoginScraper
+from src.utils.exceptions import ScraperDataExtractionError, SelectorNotFoundError
+from src.utils.utils import parse_money
 
 LOGIN_URL = 'https://conocetudeuda.cmfchile.cl/mediador/claveunica/'
 
@@ -29,9 +39,8 @@ LATE_60_89_HEADER = "60 a 89 días"
 LATE_90_PLUS_HEADER = "90 o más días"
 
 
-from src.scrapers.base_scraper import BaseScraper
-
 class CMFScraper(BaseScraper):
+    """Scraper for CMF financial data."""
 
     from src.models.clave_unica import ClaveUnica
 
@@ -48,7 +57,8 @@ class CMFScraper(BaseScraper):
         await page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT)
 
     @log_execution_func
-    async def run(self):
+    async def run(self) -> dict:
+        """Runs the CMF scraper to extract debt and line of credit data."""
         page = await self.context.new_page()
         await self.__login(page)
         debt_data: CMFScraperResult = {
@@ -102,6 +112,7 @@ class CMFScraper(BaseScraper):
 
     @log_execution_func
     async def have_debt(self, page: Page) -> bool:
+        """Checks if the user has any debt information available."""
         try:
             await page.wait_for_selector("#cmfDeuda_resumen_deuda .fs-44", timeout=NETWORK_IDLE_TIMEOUT)
             debt_selector = page.locator("#cmfDeuda_resumen_deuda .fs-44")
@@ -301,8 +312,8 @@ class CMFScraper(BaseScraper):
 
     @log_execution_func
     async def has_credit_lines(self, page: Page) -> HasCreditLinesResult:
-        """
-        Checks if the user has any available direct or indirect credit lines.
+        """Checks if the user has any available direct or indirect credit lines.
+
         Returns a dict with booleans indicating availability.
         Looks specifically inside the #cmfDeuda_creditos_disponibles section.
         """
