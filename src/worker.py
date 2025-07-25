@@ -11,6 +11,12 @@ from src.scrapers.base_scraper import BaseScraper
 from src.scrapers.captcha_solver import RecaptchaSolver
 from src.scrapers.CMF_scraper import CMFScraper
 from src.scrapers.SII_scraper import SIIScraper
+from src.config.config import (
+    RATE_LIMIT_SECONDS_HEALTH,
+    RATE_LIMIT_SECONDS_SCRAPE,
+    RATE_LIMIT_TIMES_HEALTH,
+    RATE_LIMIT_TIMES_SCRAPE,
+)
 from src.scrapers.login_scraper import LoginScraper
 from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
 
