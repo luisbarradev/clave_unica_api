@@ -1,3 +1,23 @@
+## 📌 Uso previsto y advertencia legal (ES)
+
+**Clave Única NO OFICIAL API** es un proyecto de código abierto desarrollado con fines **educativos, personales y de investigación técnica**. Está diseñado para que cualquier persona pueda automatizar, de forma local, el acceso a sus propios datos disponibles en plataformas oficiales del Estado chileno como CMF, AFC o SII, **sin intermediarios, sin almacenar claves y sin compartirlas con terceros**.
+
+### ❗ Este proyecto **NO** debe utilizarse para:
+
+- Proporcionar servicios comerciales a terceros.
+- Automatizar accesos a cuentas que no sean del propio usuario.
+- Recolectar, almacenar o distribuir credenciales de Clave Única.
+- Integrarse como backend o API pública sin consentimiento informado, validación legal ni autorización estatal.
+
+### ⚖️ Consideraciones legales:
+
+- La **Clave Única** es una credencial **personal e intransferible**, administrada por el Estado de Chile.
+- El autor **no se responsabiliza** por el mal uso del software ni por implementaciones que violen la ley o los términos de uso de las plataformas involucradas.
+
+### ✅ Recomendación:
+
+Usa este software únicamente bajo tu propio riesgo, con pleno conocimiento de su funcionamiento (audita el código) y exclusivamente en un entorno local y privado, para acceder a información **de la que tú seas titular**.
+
 # Clave Unica API
 
 This project aims to provide an API for various services related to "Clave Unica" (Unique Key) in Chile, leveraging web scraping techniques to gather information from official sources. It features a modular and extensible architecture to support various data sources.
@@ -7,6 +27,7 @@ This project aims to provide an API for various services related to "Clave Unica
 - **Common Scraper Interface**: Introduces a `BaseScraper` abstract class, ensuring a consistent interface (`run()` method) for all scrapers. This promotes modularity and simplifies integration.
 - **CMF Scraper**: Fetches data from the CMF (Comisión para el Mercado Financiero) using a user's RUT (Chilean national identification number) and password. Now inherits from `BaseScraper`.
 - **AFC Scraper**: Extracts "empresas" (companies) and "cotizaciones" (contributions) data from the AFC website. It handles reCAPTCHA solving and automatically scrapes data for the current year and the two previous years. Also inherits from `BaseScraper`.
+- **SII Scraper**: Extracts tax data from the SII (Servicio de Impuestos Internos) website. Also inherits from `BaseScraper`.
 - **Separation of Captcha Logic**: reCAPTCHA solving logic is extracted into a dedicated `RecaptchaSolver` class, improving modularity and testability.
 - **Asynchronous Task Processing**: Implements a robust asynchronous system for scraping tasks, offloading heavy operations to background workers.
 - **Redis-backed Queue & Deduplication**: Uses Redis for persistent task queuing and to prevent processing of duplicate requests within a defined timeframe.
@@ -134,6 +155,7 @@ clave_unica_api/
     │   ├── base_scraper.py # Abstract base class for all scrapers
     │   ├── captcha_solver.py # reCAPTCHA solving logic
     │   ├── CMF_scraper.py  # CMF scraping logic
+    │   ├── SII_scraper.py  # SII scraping logic
     │   ├── login_scraper.py # Login context for various services
     │   └── login_strategies/ # Concrete login strategy implementations
     │       ├── __init__.py
@@ -242,6 +264,7 @@ The API will be available at `http://localhost:8000` (or the host configured in 
     ```
 
 - **POST `/async/scrape/cmf`**: Enqueues a CMF scraping task for asynchronous processing. Results will be sent to the provided `webhook_url`.
+
   - **Request Body**:
     ```json
     {
@@ -281,6 +304,7 @@ The API will be available at `http://localhost:8000` (or the host configured in 
     ```
 
 - **POST `/async/scrape/afc`**: Enqueues an AFC scraping task for asynchronous processing. Results will be sent to the provided `webhook_url`.
+
   - **Request Body**:
     ```json
     {
@@ -292,6 +316,45 @@ The API will be available at `http://localhost:8000` (or the host configured in 
   - **Example using `curl`**:
     ```bash
     curl -X POST "http://localhost:8000/async/scrape/afc" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "username": "12345678-9",
+               "password": "your_password",
+               "webhook_url": "https://your-callback-url.com/results"
+             }'
+    ```
+
+- **POST `/scrape/sii`**: Scrapes SII data synchronously using provided credentials.
+
+  - **Request Body**:
+    ```json
+    {
+      "username": "YOUR_RUT",
+      "password": "YOUR_PASSWORD"
+    }
+    ```
+  - **Example using `curl`**:
+    ```bash
+    curl -X POST "http://localhost:8000/scrape/sii" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "username": "12345678-9",
+               "password": "your_password"
+             }'
+    ```
+
+- **POST `/async/scrape/sii`**: Enqueues an SII scraping task for asynchronous processing. Results will be sent to the provided `webhook_url`.
+  - **Request Body**:
+    ```json
+    {
+      "username": "YOUR_RUT",
+      "password": "YOUR_PASSWORD",
+      "webhook_url": "YOUR_WEBHOOK_URL"
+    }
+    ```
+  - **Example using `curl`**:
+    ```bash
+    curl -X POST "http://localhost:8000/async/scrape/sii" \
          -H "Content-Type: application/json" \
          -d '{
                "username": "12345678-9",

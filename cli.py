@@ -13,6 +13,7 @@ from src.scrapers.AFC_scraper import AFCScraper
 from src.scrapers.captcha_solver import RecaptchaSolver
 from src.scrapers.CMF_scraper import CMFScraper
 from src.scrapers.login_scraper import LoginScraper
+from src.scrapers.SII_scraper import SIIScraper
 
 
 async def main():
@@ -45,6 +46,16 @@ async def main():
     afc_parser.add_argument("--password", required=True,
                             help="Contraseña para iniciar sesión")
 
+    afc_parser = subparsers.add_parser(
+        "sii", help="Ejecuta el scraper de la SII")
+    afc_parser.add_argument("--headless", action="store_true",
+                            help="Ejecuta el navegador en modo headless")
+    afc_parser.add_argument("--debug", action="store_true",
+                            help="Muestra mensajes de depuración")
+    afc_parser.add_argument("--username", required=True,
+                            help="Usuario (RUT) para iniciar sesión")
+    afc_parser.add_argument("--password", required=True,
+                            help="Contraseña para iniciar sesión")
 
     args = parser.parse_args()
 
@@ -96,6 +107,31 @@ async def main():
                 print(data)
             except Exception as e:
                 print(f"Error al ejecutar el scraper AFC: {e}")
+            finally:
+                await browser.close()
+    elif args.command == "sii":
+        print("Ejecutando scraper SII...")
+
+        clave_unica = ClaveUnica(
+            rut=args.username,
+            password=args.password
+        )
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=args.headless)
+            context = await browser.new_context()
+
+            from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
+            login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
+            sii_scraper = SIIScraper(
+                context=context, login_scraper=login_scraper, clave_unica=clave_unica, captcha_solver=RecaptchaSolver())
+
+            try:
+                data = await sii_scraper.run()
+                print("Scraper SII ejecutado con éxito. Resultados:")
+                print(data)
+            except Exception as e:
+                print(f"Error al ejecutar el scraper SII: {e}")
             finally:
                 await browser.close()
     else:
