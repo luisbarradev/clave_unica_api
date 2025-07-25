@@ -1,3 +1,4 @@
+from fastapi import FastAPI
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -25,6 +26,7 @@ from src.scrapers.captcha_solver import RecaptchaSolver
 from src.scrapers.CMF_scraper import CMFScraper
 from src.scrapers.login_scraper import LoginScraper
 from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
+from src.scrapers.SII_scraper import SIIScraper
 from src.utils.rut_validator import validate_rut
 
 logger = get_logger(__name__)
@@ -51,25 +53,39 @@ async def lifespan(app: FastAPI):
     await FastAPILimiter.init(redis_instance)
     yield
 
+
 app = FastAPI(
     lifespan=lifespan,
-    title="API de Clave Única",
-    description="API para extraer datos de CMF y AFC usando Clave Única.",
+    title="API NO OFICIAL de Clave Única (Uso Personal)",
+    description=(
+        "Esta API permite automatizar, de forma local y personal, la extracción de datos desde servicios públicos "
+        "chilenos como la CMF (Comisión para el Mercado Financiero), la AFC (Administradora de Fondos de Cesantía) "
+        "y otros portales estatales, utilizando las credenciales de Clave Única del propio usuario.\n\n"
+        "⚠️ Este proyecto es **open source**, está orientado exclusivamente a fines personales, educativos y de auditoría técnica. "
+        "No debe utilizarse como servicio web para terceros. **No recolecta, almacena ni transmite credenciales.**\n\n"
+        "🔐 Esta API **no está afiliada ni cuenta con autorización oficial del Estado de Chile ni de sus organismos** "
+        "(Gobierno Digital, CMF, AFC, SII, etc.).\n\n"
+        "Su propósito es visibilizar los riesgos actuales de automatización no regulada, promover el empoderamiento ciudadano "
+        "sobre sus propios datos y fomentar el debate sobre el uso seguro, transparente y ético de la identidad digital.\n\n"
+        "🛑 **Está terminantemente prohibido su uso comercial, institucional o para automatizar accesos a cuentas de terceros.** "
+        "El uso indebido de esta herramienta es responsabilidad exclusiva de quien la ejecute."
+    ),
     version="1.0.0",
     license_info={
-            "name": "GPL-3.0",
-            "url": "https://www.gnu.org/licenses/gpl-3.0.html"
+        "name": "GPL-3.0",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.html"
     },
     contact={
         "name": "Luis Francisco Barra",
         "email": "contacto@luisbarra.cl",
-        "web": "https://www.luisbarra.cl"
+        "url": "https://www.luisbarra.cl"
     },
 )
 
 
 @app.get("/health", tags=["Health"],
-         dependencies=[Depends(RateLimiter(times=RATE_LIMIT_TIMES_HEALTH, seconds=RATE_LIMIT_SECONDS_HEALTH))],
+         dependencies=[Depends(RateLimiter(
+             times=RATE_LIMIT_TIMES_HEALTH, seconds=RATE_LIMIT_SECONDS_HEALTH))],
          )
 async def health_check(request: Request):
     """Perform a health check of the API and its Redis connection."""
@@ -235,6 +251,67 @@ async def scrape_afc(request: CMFScraperRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+sii_scrape_example_response = {
+    "status": "success",
+    "data": {
+        "header_data": {
+            "rut": "12345678-9",
+            "name": "Juan Pérez",
+            "email": "juan.perez@example.com"
+        },
+        "tax_declarations": [
+            {
+                "year": 2023,
+                "status": "Vigente",
+                "income": 15000000
+            },
+            {
+                "year": 2022,
+                "status": "Vigente",
+                "income": 12000000
+            }
+        ]
+    }
+}
+
+
+@app.post("/scrape/sii",
+          summary="Scrape SII data",
+          response_description="SII data scraped successfully",
+          tags=["sync"],
+          responses={
+              200: {
+                  "description": "Successful Response",
+                  "content": {
+                      "application/json": {
+                          "example": sii_scrape_example_response
+                      }
+                  }
+              }
+          }
+          )
+async def scrape_sii(request: CMFScraperRequest):
+    """Scrape SII data synchronously."""
+    try:
+        clave_unica = ClaveUnica(
+            rut=request.username,
+            password=request.password
+        )
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
+            sii_scraper = SIIScraper(context=context, login_scraper=login_scraper,
+                                     clave_unica=clave_unica, captcha_solver=RecaptchaSolver())
+
+            data = await sii_scraper.run()
+            await browser.close()
+            return {"status": "success", "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/async/scrape/cmf",
           summary="Scrape CMF data asynchronously",
           response_description="CMF scraping task accepted",
@@ -293,3 +370,34 @@ async def async_scrape_afc(request: CMFScraperAsyncRequest):
     logger.info(
         f"Task {task_id} enqueued successfully for user {request.username}.")
     return {"status": "accepted", "task_id": task_id, "message": "AFC scraping task enqueued successfully"}
+
+
+@app.post("/async/scrape/sii",
+          summary="Scrape SII data asynchronously",
+          dependencies=[Depends(RateLimiter(
+              times=RATE_LIMIT_TIMES_SCRAPE, seconds=RATE_LIMIT_SECONDS_SCRAPE))],
+          response_description="SII scraping task accepted",
+          tags=["async"]
+          )
+async def async_scrape_sii(request: CMFScraperAsyncRequest):
+    """Scrape SII data asynchronously by enqueuing a task."""
+    if deduplicator.is_duplicate(request.username, request.webhook_url):
+        logger.info(
+            f"Duplicate task detected for user {request.username}. Rejecting.")
+        return {"status": "rejected", "message": "Duplicate task detected within the last 5 minutes."}
+
+    task_id = str(uuid.uuid4())
+    task = Task(
+        task_id=task_id,
+        username=request.username,
+        password=request.password,
+        webhook_url=request.webhook_url,
+        scraper_type='sii',
+        retries=0,
+        max_retries=3
+    )
+    queue_manager.enqueue(task)
+    deduplicator.mark_as_processed(request.username, request.webhook_url)
+    logger.info(
+        f"Task {task_id} enqueued successfully for user {request.username}.")
+    return {"status": "accepted", "task_id": task_id, "message": "SII scraping task enqueued successfully"}
