@@ -1,4 +1,4 @@
-from config.config import NETWORK_IDLE_TIMEOUT
+from src.config.config import NETWORK_IDLE_TIMEOUT
 from src.scrapers.base_scraper import BaseScraper
 from src.scrapers.captcha_solver import RecaptchaSolver
 
