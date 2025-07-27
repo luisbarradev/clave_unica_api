@@ -4,19 +4,10 @@ import logging
 import requests
 from playwright.async_api import async_playwright
 
+from src.facades.scraper_facade import ScraperFacade
 from src.models.clave_unica import ClaveUnica
 from src.queue.queue_manager import QueueManager
-from src.scrapers.AFC_scraper import AFCScraper
-from src.scrapers.base_scraper import BaseScraper
 from src.scrapers.captcha_solver import RecaptchaSolver
-from src.scrapers.CMF_scraper import CMFScraper
-from src.scrapers.SII_scraper import SIIScraper
-from src.config.config import (
-    RATE_LIMIT_SECONDS_HEALTH,
-    RATE_LIMIT_SECONDS_SCRAPE,
-    RATE_LIMIT_TIMES_HEALTH,
-    RATE_LIMIT_TIMES_SCRAPE,
-)
 from src.scrapers.login_scraper import LoginScraper
 from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
 
@@ -38,26 +29,13 @@ async def process_task(task, queue_manager: QueueManager):
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
             login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
-            scraper: BaseScraper
-            data = None
-            if task.scraper_type == 'cmf':
-                scraper = CMFScraper(
-                    context=context, login_scraper=login_scraper, clave_unica=clave_unica)
-                data = await scraper.run()
-            elif task.scraper_type == 'afc':
-                scraper = AFCScraper(
-                    context=context, login_scraper=login_scraper,
-                    clave_unica=clave_unica, captcha_solver=RecaptchaSolver()
-                )
-                data = await scraper.run()
-            elif task.scraper_type == 'sii':
-                scraper = SIIScraper(
-                    context=context, login_scraper=login_scraper,
-                    clave_unica=clave_unica, captcha_solver=RecaptchaSolver()
-                )
-                data = await scraper.run()
-            else:
-                raise ValueError(f"Unknown scraper type: {task.scraper_type}")
+            facade = ScraperFacade(
+                context=context,
+                login_scraper=login_scraper,
+                clave_unica=clave_unica,
+                captcha_solver=RecaptchaSolver(),
+            )
+            data = await facade.scrape(task.scraper_type)
 
             await browser.close()
 
