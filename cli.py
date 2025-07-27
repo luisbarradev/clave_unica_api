@@ -8,12 +8,10 @@ import asyncio
 
 from playwright.async_api import async_playwright
 
+from src.facades.scraper_facade import ScraperFacade
 from src.models.clave_unica import ClaveUnica
-from src.scrapers.AFC_scraper import AFCScraper
 from src.scrapers.captcha_solver import RecaptchaSolver
-from src.scrapers.CMF_scraper import CMFScraper
 from src.scrapers.login_scraper import LoginScraper
-from src.scrapers.SII_scraper import SIIScraper
 
 
 async def main():
@@ -59,13 +57,10 @@ async def main():
 
     args = parser.parse_args()
 
-    if args.command == "cmf":
-        print("Ejecutando scraper CMF...")
+    if args.command in {"cmf", "afc", "sii"}:
+        print(f"Ejecutando scraper {args.command.upper()}...")
 
-        clave_unica = ClaveUnica(
-            rut=args.username,
-            password=args.password
-        )
+        clave_unica = ClaveUnica(rut=args.username, password=args.password)
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=args.headless)
@@ -73,65 +68,19 @@ async def main():
 
             from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
             login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
-            cmf_scraper = CMFScraper(
-                context=context, login_scraper=login_scraper, clave_unica=clave_unica)
+            facade = ScraperFacade(
+                context=context,
+                login_scraper=login_scraper,
+                clave_unica=clave_unica,
+                captcha_solver=RecaptchaSolver(),
+            )
 
             try:
-                data = await cmf_scraper.run()
-                print("Scraper CMF ejecutado con éxito. Resultados:")
+                data = await facade.scrape(args.command)
+                print(f"Scraper {args.command.upper()} ejecutado con éxito. Resultados:")
                 print(data)
             except Exception as e:
-                print(f"Error al ejecutar el scraper CMF: {e}")
-            finally:
-                await browser.close()
-    elif args.command == "afc":
-        print("Ejecutando scraper AFC...")
-
-        clave_unica = ClaveUnica(
-            rut=args.username,
-            password=args.password
-        )
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=args.headless)
-            context = await browser.new_context()
-
-            from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
-            login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
-            afc_scraper = AFCScraper(
-                context=context, login_scraper=login_scraper, clave_unica=clave_unica, captcha_solver=RecaptchaSolver())
-
-            try:
-                data = await afc_scraper.run()
-                print("Scraper AFC ejecutado con éxito. Resultados:")
-                print(data)
-            except Exception as e:
-                print(f"Error al ejecutar el scraper AFC: {e}")
-            finally:
-                await browser.close()
-    elif args.command == "sii":
-        print("Ejecutando scraper SII...")
-
-        clave_unica = ClaveUnica(
-            rut=args.username,
-            password=args.password
-        )
-
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=args.headless)
-            context = await browser.new_context()
-
-            from src.scrapers.login_strategies.clave_unica_strategy import ClaveUnicaLoginStrategy
-            login_scraper = LoginScraper(ClaveUnicaLoginStrategy())
-            sii_scraper = SIIScraper(
-                context=context, login_scraper=login_scraper, clave_unica=clave_unica, captcha_solver=RecaptchaSolver())
-
-            try:
-                data = await sii_scraper.run()
-                print("Scraper SII ejecutado con éxito. Resultados:")
-                print(data)
-            except Exception as e:
-                print(f"Error al ejecutar el scraper SII: {e}")
+                print(f"Error al ejecutar el scraper {args.command.upper()}: {e}")
             finally:
                 await browser.close()
     else:
